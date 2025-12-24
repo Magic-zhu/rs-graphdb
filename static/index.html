@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rust Graph Database - Visualization</title>
+    <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #1e1e1e;
+            color: #e0e0e0;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        header {
+            background: #2d2d2d;
+            padding: 15px 30px;
+            border-bottom: 2px solid #3d3d3d;
+        }
+
+        h1 {
+            color: #4ec9b0;
+            font-size: 24px;
+        }
+
+        .container {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .sidebar {
+            width: 350px;
+            background: #252526;
+            border-right: 1px solid #3d3d3d;
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        .main {
+            flex: 1;
+            position: relative;
+        }
+
+        #graph {
+            width: 100%;
+            height: 100%;
+            background: #1e1e1e;
+        }
+
+        .panel {
+            margin-bottom: 20px;
+            background: #2d2d2d;
+            padding: 15px;
+            border-radius: 5px;
+        }
+
+        .panel h3 {
+            color: #4ec9b0;
+            margin-bottom: 10px;
+            font-size: 16px;
+        }
+
+        input, textarea, button {
+            width: 100%;
+            padding: 10px;
+            margin: 5px 0;
+            background: #3c3c3c;
+            border: 1px solid #555;
+            color: #e0e0e0;
+            border-radius: 3px;
+            font-family: inherit;
+        }
+
+        button {
+            background: #0e639c;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background 0.2s;
+        }
+
+        button:hover {
+            background: #1177bb;
+        }
+
+        .small-input {
+            display: inline-block;
+            width: calc(50% - 5px);
+        }
+
+        .output {
+            background: #1e1e1e;
+            padding: 10px;
+            border-radius: 3px;
+            max-height: 200px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+        }
+
+        .success { color: #4ec9b0; }
+        .error { color: #f48771; }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>🦀 Rust Graph Database - Interactive Visualization</h1>
+    </header>
+
+    <div class="container">
+        <div class="sidebar">
+            <div class="panel">
+                <h3>📦 Create Node</h3>
+                <input type="text" id="nodeLabel" placeholder="Label (e.g., User)">
+                <input type="text" id="nodeName" placeholder="name property">
+                <input type="number" id="nodeAge" placeholder="age property (optional)">
+                <button onclick="createNode()">Create Node</button>
+                <div id="nodeOutput" class="output"></div>
+            </div>
+
+            <div class="panel">
+                <h3>🔗 Create Relationship</h3>
+                <input type="number" id="relStart" placeholder="Start Node ID" class="small-input">
+                <input type="number" id="relEnd" placeholder="End Node ID" class="small-input">
+                <input type="text" id="relType" placeholder="Relationship Type (e.g., FRIEND)">
+                <button onclick="createRel()">Create Relationship</button>
+                <div id="relOutput" class="output"></div>
+            </div>
+
+            <div class="panel">
+                <h3>🔍 Query Graph</h3>
+                <input type="text" id="queryLabel" placeholder="Label (e.g., User)">
+                <input type="text" id="queryProp" placeholder="Property (optional)">
+                <input type="text" id="queryValue" placeholder="Value (optional)">
+                <button onclick="queryGraph()">Query</button>
+                <div id="queryOutput" class="output"></div>
+            </div>
+
+            <div class="panel">
+                <h3>🎨 Actions</h3>
+                <button onclick="loadFullGraph()">Load Full Graph</button>
+                <button onclick="clearGraph()">Clear Visualization</button>
+            </div>
+        </div>
+
+        <div class="main">
+            <div id="graph"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://127.0.0.1:3000';
+
+        // Initialize vis-network
+        const container = document.getElementById('graph');
+        const data = {
+            nodes: new vis.DataSet([]),
+            edges: new vis.DataSet([])
+        };
+        const options = {
+            nodes: {
+                shape: 'dot',
+                size: 20,
+                font: {
+                    size: 14,
+                    color: '#e0e0e0'
+                },
+                borderWidth: 2,
+                color: {
+                    border: '#4ec9b0',
+                    background: '#0e639c',
+                    highlight: {
+                        border: '#4ec9b0',
+                        background: '#1177bb'
+                    }
+                }
+            },
+            edges: {
+                width: 2,
+                color: { color: '#999', highlight: '#4ec9b0' },
+                arrows: { to: { enabled: true, scaleFactor: 0.5 } },
+                font: { size: 12, color: '#999', align: 'top' }
+            },
+            physics: {
+                enabled: true,
+                barnesHut: {
+                    gravitationalConstant: -8000,
+                    springLength: 150
+                }
+            }
+        };
+        const network = new vis.Network(container, data, options);
+
+        async function createNode() {
+            const label = document.getElementById('nodeLabel').value;
+            const name = document.getElementById('nodeName').value;
+            const age = document.getElementById('nodeAge').value;
+
+            const properties = { name };
+            if (age) properties.age = parseInt(age);
+
+            try {
+                const res = await fetch(`${API_BASE}/nodes`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ labels: [label], properties })
+                });
+                const result = await res.json();
+                document.getElementById('nodeOutput').innerHTML =
+                    `<span class="success">✓ Created node ID: ${result.id}</span>`;
+
+                // Add to visualization
+                data.nodes.add({
+                    id: result.id,
+                    label: `${name}\n(${label})`,
+                    title: `ID: ${result.id}\nLabel: ${label}`
+                });
+            } catch (e) {
+                document.getElementById('nodeOutput').innerHTML =
+                    `<span class="error">✗ Error: ${e.message}</span>`;
+            }
+        }
+
+        async function createRel() {
+            const start = parseInt(document.getElementById('relStart').value);
+            const end = parseInt(document.getElementById('relEnd').value);
+            const relType = document.getElementById('relType').value;
+
+            try {
+                const res = await fetch(`${API_BASE}/rels`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        start,
+                        end,
+                        rel_type: relType,
+                        properties: {}
+                    })
+                });
+                const result = await res.json();
+                document.getElementById('relOutput').innerHTML =
+                    `<span class="success">✓ Created relationship ID: ${result.id}</span>`;
+
+                // Add to visualization
+                data.edges.add({
+                    id: result.id,
+                    from: start,
+                    to: end,
+                    label: relType
+                });
+            } catch (e) {
+                document.getElementById('relOutput').innerHTML =
+                    `<span class="error">✗ Error: ${e.message}</span>`;
+            }
+        }
+
+        async function queryGraph() {
+            const label = document.getElementById('queryLabel').value;
+            const property = document.getElementById('queryProp').value || undefined;
+            const value = document.getElementById('queryValue').value || undefined;
+
+            try {
+                const res = await fetch(`${API_BASE}/query`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ label, property, value })
+                });
+                const results = await res.json();
+                document.getElementById('queryOutput').innerHTML =
+                    `<span class="success">✓ Found ${results.length} nodes</span><br>` +
+                    results.map(n => `ID ${n.id}: ${JSON.stringify(n.properties)}`).join('<br>');
+
+                // Highlight in visualization
+                const nodeIds = results.map(n => n.id);
+                network.selectNodes(nodeIds);
+            } catch (e) {
+                document.getElementById('queryOutput').innerHTML =
+                    `<span class="error">✗ Error: ${e.message}</span>`;
+            }
+        }
+
+        async function loadFullGraph() {
+            // 暂时不实现完整图加载，用户需手动添加
+            alert('Full graph loading not yet implemented. Please create nodes/relationships manually.');
+        }
+
+        function clearGraph() {
+            data.nodes.clear();
+            data.edges.clear();
+        }
+    </script>
+</body>
+</html>
