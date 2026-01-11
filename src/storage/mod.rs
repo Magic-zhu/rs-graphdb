@@ -1,5 +1,8 @@
 pub mod mem_store;
 pub mod sled_store;
+pub mod async_store;
+
+pub use async_store::AsyncStorage;
 
 use crate::values::Value;
 use std::collections::HashMap;
@@ -7,14 +10,14 @@ use std::collections::HashMap;
 pub type NodeId = u64;
 pub type RelId = u64;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct StoredNode {
     pub id: NodeId,
     pub labels: Vec<String>,
     pub props: HashMap<String, Value>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct StoredRel {
     pub id: RelId,
     pub start: NodeId,
@@ -70,5 +73,21 @@ pub trait StorageEngine: Send + Sync {
 
     fn rollback_tx(&mut self, _tx: TxHandle) -> Result<(), StorageError> {
         Err(StorageError::TxNotSupported)
+    }
+
+    /// 批量创建节点，返回创建的节点ID列表
+    fn batch_create_nodes(&mut self, nodes: Vec<(Vec<String>, HashMap<String, Value>)>) -> Vec<NodeId> {
+        // 默认实现：逐个创建
+        nodes.into_iter()
+            .map(|(labels, props)| self.create_node(labels, props))
+            .collect()
+    }
+
+    /// 批量创建关系，返回创建的关系ID列表
+    fn batch_create_rels(&mut self, rels: Vec<(NodeId, NodeId, String, HashMap<String, Value>)>) -> Vec<RelId> {
+        // 默认实现：逐个创建
+        rels.into_iter()
+            .map(|(start, end, typ, props)| self.create_rel(start, end, typ, props))
+            .collect()
     }
 }

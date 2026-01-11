@@ -1,7 +1,7 @@
 use crate::storage::{NodeId, RelId};
 use crate::values::{Properties, Value};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Node {
     pub id: NodeId,
     pub labels: Vec<String>,
@@ -18,7 +18,7 @@ impl Node {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Relationship {
     pub id: RelId,
     pub start: NodeId,

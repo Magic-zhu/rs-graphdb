@@ -1,6 +1,6 @@
-use rust_graphdb::{GraphDatabase, NodeId};
-use rust_graphdb::values::{Properties, Value};
-use rust_graphdb::query::Query;
+use rs_graphdb::{GraphDatabase, NodeId};
+use rs_graphdb::values::{Properties, Value};
+use rs_graphdb::query::Query;
 
 fn make_user(name: &str, age: i64) -> Properties {
     let mut props = Properties::new();

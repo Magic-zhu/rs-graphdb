@@ -1,5 +1,5 @@
-use rust_graphdb::{GraphDatabase, cypher};
-use rust_graphdb::values::Value;
+use rs_graphdb::{GraphDatabase, cypher};
+use rs_graphdb::values::Value;
 
 #[test]
 fn test_delete_single_node() {

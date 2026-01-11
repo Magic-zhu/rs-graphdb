@@ -1,5 +1,5 @@
-use rust_graphdb::{GraphDatabase, values::{Properties, Value}};
-use rust_graphdb::storage::sled_store::SledStore;
+use rs_graphdb::{GraphDatabase, values::{Properties, Value}};
+use rs_graphdb::storage::sled_store::SledStore;
 use std::fs;
 
 fn make_user(name: &str) -> Properties {

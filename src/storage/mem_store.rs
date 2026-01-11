@@ -136,4 +136,50 @@ impl StorageEngine for MemStore {
             false
         }
     }
+
+    fn batch_create_nodes(
+        &mut self,
+        nodes: Vec<(Vec<String>, HashMap<String, Value>)>,
+    ) -> Vec<NodeId> {
+        // 预分配 ID
+        let start_id = self.next_node_id;
+        let count = nodes.len() as NodeId;
+        self.next_node_id += count;
+
+        // 批量创建节点
+        for (i, (labels, props)) in nodes.into_iter().enumerate() {
+            let id = start_id + i as NodeId;
+            let node = StoredNode { id, labels, props };
+            self.nodes.insert(id, node);
+        }
+
+        (start_id..start_id + count).collect()
+    }
+
+    fn batch_create_rels(
+        &mut self,
+        rels: Vec<(NodeId, NodeId, String, HashMap<String, Value>)>,
+    ) -> Vec<RelId> {
+        // 预分配 ID
+        let start_id = self.next_rel_id;
+        let count = rels.len() as RelId;
+        self.next_rel_id += count;
+
+        // 批量创建关系
+        for (i, (start, end, typ, props)) in rels.into_iter().enumerate() {
+            let id = start_id + i as RelId;
+            let rel = StoredRel {
+                id,
+                start,
+                end,
+                typ,
+                props,
+            };
+            self.rels.insert(id, rel);
+            self.outgoing.entry(start).or_default().push(id);
+            self.incoming.entry(end).or_default().push(id);
+        }
+
+        (start_id..start_id + count).collect()
+    }
 }

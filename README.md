@@ -97,26 +97,85 @@ curl -X POST http://127.0.0.1:3000/query \
 ## 项目结构
 
 ```
-rust-graphdb/
+rs-graphdb/
 ├── src/
 │   ├── values/          # 值类型定义（Int, Bool, Text, Float）
-│   ├── storage/         # 存储引擎抽象 + 内存实现
-│   ├── graph/           # 图数据库 API（节点、关系操作）
-│   ├── index.rs         # 属性索引实现
+│   ├── storage/         # 存储引擎抽象 + 内存/Sled实现
+│   │   ├── mem_store.rs      # 内存存储引擎
+│   │   ├── sled_store.rs     # Sled持久化存储
+│   │   └── async_store.rs    # 异步存储接口
+│   ├── graph/           # 图数据库核心 API
+│   │   ├── db.rs             # GraphDatabase 主实现
+│   │   ├── async_db.rs       # 异步图数据库
+│   │   └── model.rs          # 节点/关系数据模型
+│   ├── algorithms/      # 图算法实现
+│   │   ├── pagerank.rs       # PageRank 算法
+│   │   ├── centrality.rs     # 中心性算法
+│   │   ├── shortest_path.rs  # 最短路径算法
+│   │   ├── community.rs      # 社区发现算法
+│   │   └── louvain.rs        # Louvain 算法
+│   ├── cache/           # 多层缓存系统
+│   │   ├── manager.rs        # 缓存管理器
+│   │   ├── node_cache.rs     # 节点缓存
+│   │   ├── adjacency_cache.rs # 邻接缓存
+│   │   ├── query_cache.rs    # 查询缓存
+│   │   ├── index_cache.rs    # 索引缓存
+│   │   └── lru.rs            # LRU 缓存实现
+│   ├── cypher/          # Cypher 查询语言支持
+│   │   ├── parser.rs         # 词法与语法分析
+│   │   ├── ast.rs            # 抽象语法树
+│   │   └── executor.rs       # 查询执行器
+│   ├── grpc/            # gRPC 服务模块
+│   ├── index.rs         # 内存属性索引
+│   ├── index_persistent.rs    # 持久化索引
 │   ├── index_schema.rs  # 索引配置 schema
 │   ├── query.rs         # 链式查询 API
+│   ├── concurrent.rs    # 并发控制
+│   ├── service.rs       # gRPC 服务实现
 │   ├── server.rs        # HTTP REST 服务
 │   └── lib.rs
 ├── tests/               # 集成测试
-└── examples/
-    └── demo_server.rs   # 服务器 demo
+│   ├── basic.rs                    # 基础功能测试
+│   ├── query.rs                    # 查询测试
+│   ├── query_advanced.rs           # 高级查询测试
+│   ├── query_extended.rs           # 扩展查询测试
+│   ├── query_reverse.rs            # 反向遍历测试
+│   ├── index_query.rs              # 索引查询测试
+│   ├── cypher_test.rs              # Cypher 查询测试
+│   ├── cypher_create_test.rs       # Cypher 创建测试
+│   ├── cypher_delete_test.rs       # Cypher 删除测试
+│   ├── cypher_extended.rs          # Cypher 扩展测试
+│   ├── algorithms_test.rs          # 算法测试
+│   ├── sled_persistence_test.rs    # Sled 持久化测试
+│   ├── cache_integration_test.rs   # 缓存集成测试
+│   ├── async_write_test.rs         # 异步写入测试
+│   └── batch_write_test.rs         # 批量写入测试
+├── examples/             # 示例程序
+│   ├── demo_server.rs         # HTTP REST API 服务器
+│   ├── cypher_demo.rs         # Cypher 查询示例
+│   ├── algorithms_demo.rs     # 图算法演示
+│   ├── concurrent_demo.rs     # 并发操作演示
+│   ├── cache_demo.rs          # 缓存功能演示
+│   ├── grpc_server.rs         # gRPC 服务器
+│   └── grpc_client_test.rs    # gRPC 客户端测试
+├── benches/              # 性能基准测试
+│   ├── query_benchmarks.rs        # 查询性能测试
+│   └── batch_write_benchmarks.rs  # 批量写入性能测试
+├── proto/                # gRPC 协议定义
+├── web-ui/               # Vue 3 Web 管理界面
+├── static/               # 静态资源文件
+├── build.rs              # 构建脚本
+├── Cargo.toml            # 项目依赖配置
+├── ALGORITHMS.md         # 算法实现文档
+├── CYPHER_GUIDE.md       # Cypher 查询指南
+└── FEATURES.md           # 功能特性文档
 ```
 
 ## 使用 Rust API
 
 ```rust
-use rust_graphdb::{GraphDatabase, values::{Properties, Value}};
-use rust_graphdb::query::Query;
+use rs_graphdb::{GraphDatabase, values::{Properties, Value}};
+use rs_graphdb::query::Query;
 
 fn main() {
     let mut db = GraphDatabase::new_in_memory();
@@ -138,6 +197,45 @@ fn main() {
 }
 ```
 
+## Web UI 界面
+
+项目包含一个基于 **Vue 3 + Pinia + Tailwind CSS** 的可视化管理界面。
+
+### 构建前端
+
+```bash
+cd web-ui
+npm install
+npm run build
+```
+
+构建后的文件将输出到 `static/` 目录。
+
+### 启动服务器
+
+```bash
+cargo run --example demo_server
+```
+
+然后访问 `http://127.0.0.1:3000/ui` 查看可视化界面。
+
+### 前端功能
+
+- **仪表盘** - 数据库统计、标签和关系类型概览
+- **节点管理** - 创建、查看、搜索节点
+- **关系管理** - 创建关系、查看关系列表
+- **查询功能** - 按标签查询、按属性查询、全局搜索
+- **图可视化** - 交互式网络图、节点详情、邻居展开
+
+### 前端开发
+
+```bash
+cd web-ui
+npm run dev
+```
+
+开发服务器将在 `http://localhost:5173` 启动，支持热重载。
+
 ## 查询 API 方法
 
 - `from_label(label)` - 按 label 全表扫描选起点
@@ -155,7 +253,7 @@ fn main() {
 默认索引 `User.name` 和 `User.age`。自定义索引：
 
 ```rust
-use rust_graphdb::index_schema::IndexSchema;
+use rs_graphdb::index_schema::IndexSchema;
 
 let mut schema = IndexSchema::new();
 schema.add_index("Article", "slug");
@@ -167,16 +265,12 @@ let db = GraphDatabase::new_in_memory_with_schema(schema);
 ## 限制与未来改进
 
 当前版本是"能在小项目里真用"的最小实现：
-
-- ❌ 只支持内存存储（无持久化）
 - ❌ 无并发事务支持
 - ❌ 无 Cypher 文本解析器
 - ❌ 无 Bolt 协议支持
 
-未来可以：
-- 使用 sled/SQLite 做持久化存储
-- 实现简单 Cypher parser
-- 添加多线程/异步查询支持
+- [] 实现简单 Cypher parser
+- [] 添加多线程/异步查询支持
 
 ## 许可证
 

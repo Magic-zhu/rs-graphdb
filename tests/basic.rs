@@ -1,5 +1,5 @@
-use rust_graphdb::{GraphDatabase, NodeId};
-use rust_graphdb::values::{Properties, Value};
+use rs_graphdb::{GraphDatabase, NodeId};
+use rs_graphdb::values::{Properties, Value};
 
 fn make_props(name: &str) -> Properties {
     let mut props = Properties::new();

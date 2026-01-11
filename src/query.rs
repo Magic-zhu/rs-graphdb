@@ -3,6 +3,9 @@ use crate::graph::model::Node;
 use crate::storage::{NodeId, StorageEngine};
 use crate::values::Value;
 
+#[cfg(feature = "caching")]
+use crate::cache::query_cache::{QueryCache, QueryFingerprint, QueryType};
+
 /// 一个非常简化的查询 API：
 /// - from_label：按标签选起点
 /// - where_prop_eq / where_prop_int_gt：属性过滤
@@ -11,6 +14,8 @@ use crate::values::Value;
 pub struct Query<'a, E: StorageEngine> {
     db: &'a GraphDatabase<E>,
     pub(crate) current: Vec<NodeId>,
+    #[cfg(feature = "caching")]
+    fingerprint: Option<QueryFingerprint>,
 }
 
 impl<'a, E: StorageEngine> Query<'a, E> {
@@ -19,6 +24,18 @@ impl<'a, E: StorageEngine> Query<'a, E> {
         Self {
             db,
             current: Vec::new(),
+            #[cfg(feature = "caching")]
+            fingerprint: None,
+        }
+    }
+
+    /// 从所有节点开始并启用查询缓存
+    #[cfg(feature = "caching")]
+    pub fn new_cached(db: &'a GraphDatabase<E>) -> Self {
+        Self {
+            db,
+            current: Vec::new(),
+            fingerprint: Some(QueryFingerprint::label_query("*")),
         }
     }
 
@@ -214,6 +231,60 @@ impl<'a, E: StorageEngine> Query<'a, E> {
             None
         } else {
             Some(values.iter().sum::<i64>() as f64 / values.len() as f64)
+        }
+    }
+
+    // ========== 缓存查询方法 ==========
+
+    /// 使用缓存收集节点
+    #[cfg(feature = "caching")]
+    pub fn collect_nodes_cached(self) -> Vec<Node> {
+        if let (Some(cache), Some(fingerprint)) = (self.db.cache(), self.fingerprint.as_ref()) {
+            let current_ids = self.current.clone();
+
+            // 尝试从缓存获取
+            if let Some(cached_ids) = cache.get_query(&fingerprint) {
+                // 从缓存命中的ID列表收集节点
+                return cached_ids
+                    .into_iter()
+                    .filter_map(|id| self.db.get_node(id))
+                    .collect();
+            }
+
+            // 缓存未命中，执行查询并缓存结果
+            let result: Vec<Node> = current_ids
+                .into_iter()
+                .filter_map(|id| self.db.get_node(id))
+                .collect();
+
+            let result_ids: Vec<NodeId> = result.iter().map(|n| n.id).collect();
+            cache.put_query(fingerprint.clone(), result_ids);
+
+            result
+        } else {
+            // 没有启用缓存，回退到常规方法
+            self.collect_nodes()
+        }
+    }
+
+    /// 使用缓存计数
+    #[cfg(feature = "caching")]
+    pub fn count_cached(self) -> usize {
+        if let (Some(cache), Some(fingerprint)) = (self.db.cache(), self.fingerprint.as_ref()) {
+            let current_ids = self.current.clone();
+
+            // 尝试从缓存获取
+            if let Some(cached_ids) = cache.get_query(&fingerprint) {
+                return cached_ids.len();
+            }
+
+            // 缓存未命中，执行并缓存
+            let count = current_ids.len();
+            cache.put_query(fingerprint.clone(), current_ids);
+
+            count
+        } else {
+            self.count()
         }
     }
 }

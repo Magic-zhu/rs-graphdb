@@ -7,7 +7,7 @@
 #### BFS 最短路径（无权图）
 
 ```rust
-use rust_graphdb::algorithms::bfs_shortest_path;
+use rs_graphdb::algorithms::bfs_shortest_path;
 
 let path = bfs_shortest_path(&db, start_node, end_node);
 if let Some(p) = path {
@@ -23,7 +23,7 @@ if let Some(p) = path {
 #### Dijkstra 算法（加权图）
 
 ```rust
-use rust_graphdb::algorithms::dijkstra;
+use rs_graphdb::algorithms::dijkstra;
 
 let result = dijkstra(&db, start_node, end_node);
 if let Some((path, cost)) = result {
@@ -43,7 +43,7 @@ if let Some((path, cost)) = result {
 衡量节点的连接数量。
 
 ```rust
-use rust_graphdb::algorithms::degree_centrality;
+use rs_graphdb::algorithms::degree_centrality;
 
 let centrality = degree_centrality(&db);
 for (node_id, score) in centrality {
@@ -60,7 +60,7 @@ for (node_id, score) in centrality {
 衡量节点在最短路径上的重要性。
 
 ```rust
-use rust_graphdb::algorithms::betweenness_centrality;
+use rs_graphdb::algorithms::betweenness_centrality;
 
 let centrality = betweenness_centrality(&db);
 let mut nodes: Vec<_> = centrality.iter().collect();
@@ -83,7 +83,7 @@ for (node_id, score) in nodes.iter().take(5) {
 找出图中的所有连通子图。
 
 ```rust
-use rust_graphdb::algorithms::connected_components;
+use rs_graphdb::algorithms::connected_components;
 
 let components = connected_components(&db);
 for (node_id, component_id) in components {
@@ -98,7 +98,7 @@ for (node_id, component_id) in components {
 #### 获取分量列表
 
 ```rust
-use rust_graphdb::algorithms::community::get_components;
+use rs_graphdb::algorithms::community::get_components;
 
 let components = get_components(&db);
 println!("Found {} components", components.len());
@@ -115,8 +115,8 @@ for (i, component) in components.iter().enumerate() {
 ### 示例 1：社交网络分析
 
 ```rust
-use rust_graphdb::{GraphDatabase, algorithms};
-use rust_graphdb::values::{Properties, Value};
+use rs_graphdb::{GraphDatabase, algorithms};
+use rs_graphdb::values::{Properties, Value};
 
 let mut db = GraphDatabase::new_in_memory();
 

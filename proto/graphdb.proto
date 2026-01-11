@@ -1,0 +1,65 @@
+syntax = "proto3";
+
+package rsgraphdb;
+
+// Value 类型映射 Rust values::Value
+message Value {
+  oneof value {
+    int64 int_value = 1;
+    bool bool_value = 2;
+    string text_value = 3;
+    double float_value = 4;
+  }
+}
+
+// Node 节点
+message Node {
+  uint64 id = 1;
+  repeated string labels = 2;
+  map<string, Value> properties = 3;
+}
+
+// Relationship 关系
+message Relationship {
+  uint64 id = 1;
+  uint64 start = 2;
+  uint64 end = 3;
+  string rel_type = 4;
+  map<string, Value> properties = 5;
+}
+
+// 创建节点请求
+message CreateNodeRequest {
+  repeated string labels = 1;
+  map<string, Value> properties = 2;
+}
+
+// 创建关系请求
+message CreateRelationshipRequest {
+  uint64 start = 1;
+  uint64 end = 2;
+  string rel_type = 3;
+  map<string, Value> properties = 4;
+}
+
+// Cypher 查询请求
+message ExecuteCypherRequest {
+  string query = 1;
+}
+
+// 查询结果中的一行
+message QueryRow {
+  map<string, Value> fields = 1;
+}
+
+// Cypher 查询响应
+message ExecuteCypherResponse {
+  repeated QueryRow rows = 1;
+}
+
+// GraphDB 服务
+service GraphDbService {
+  rpc CreateNode(CreateNodeRequest) returns (Node);
+  rpc CreateRelationship(CreateRelationshipRequest) returns (Relationship);
+  rpc ExecuteCypher(ExecuteCypherRequest) returns (ExecuteCypherResponse);
+}

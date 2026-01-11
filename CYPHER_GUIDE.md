@@ -162,7 +162,7 @@ RETURN a
 ## 使用示例（Rust API）
 
 ```rust
-use rust_graphdb::cypher;
+use rs_graphdb::cypher;
 
 let query_str = r#"
     MATCH (a:User {name: "Alice"})-[:FRIEND]->(b)

@@ -1,8 +1,8 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use rust_graphdb::{GraphDatabase, values::{Properties, Value}};
-use rust_graphdb::query::Query;
+use rs_graphdb::{GraphDatabase, values::{Properties, Value}};
+use rs_graphdb::query::Query;
 
-fn create_test_graph(size: usize) -> GraphDatabase<rust_graphdb::storage::mem_store::MemStore> {
+fn create_test_graph(size: usize) -> GraphDatabase<rs_graphdb::storage::mem_store::MemStore> {
     let mut db = GraphDatabase::new_in_memory();
 
     let mut nodes = Vec::new();

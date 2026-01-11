@@ -4,6 +4,9 @@ use crate::storage::{NodeId, RelId, StorageEngine};
 use crate::values::Properties;
 use std::sync::{Arc, RwLock};
 
+#[cfg(feature = "caching")]
+use crate::cache::CacheManager;
+
 /// 并发友好的图数据库包装器
 ///
 /// 使用 Arc<RwLock<>> 实现多读单写的并发访问模式：
@@ -23,6 +26,34 @@ impl<E: StorageEngine> ConcurrentGraphDB<E> {
     pub fn clone_handle(&self) -> Self {
         Self {
             db: Arc::clone(&self.db),
+        }
+    }
+
+    #[cfg(feature = "caching")]
+    pub fn set_cache(&self, cache: CacheManager) {
+        let mut db = self.db.write().unwrap();
+        db.set_cache(cache);
+    }
+
+    #[cfg(feature = "caching")]
+    pub fn with_cache(self, cache: CacheManager) -> Self {
+        let mut db = self.db.write().unwrap();
+        db.set_cache(cache);
+        drop(db);
+        self
+    }
+
+    #[cfg(feature = "caching")]
+    pub fn get_cache_report(&self) -> Option<crate::cache::stats::OverallCacheReport> {
+        let db = self.db.read().unwrap();
+        db.cache().map(|cache| cache.overall_report())
+    }
+
+    #[cfg(feature = "caching")]
+    pub fn clear_all_cache(&self) {
+        let db = self.db.read().unwrap();
+        if let Some(cache) = db.cache() {
+            cache.clear_all();
         }
     }
 

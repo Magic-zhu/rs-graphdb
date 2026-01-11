@@ -3,7 +3,8 @@
 ## ✅ 已实现功能
 
 ### 1. 核心存储与图模型
-- ✅ 内存存储引擎（`MemStore`）
+- ✅ 内存存储引擎
+- ✅ 基于sled的文件存储引擎
 - ✅ 节点（Node）：ID + Labels + Properties
 - ✅ 关系（Relationship）：ID + Type + Start + End + Properties
 - ✅ 双向邻接表（支持 outgoing 和 incoming 遍历）
@@ -14,6 +15,7 @@
 - ✅ 基于 Schema 的索引配置（IndexSchema）
 - ✅ 默认索引：User.name, User.age
 - ✅ 自定义索引配置
+- ✅ 索引缓存
 
 ### 3. 查询 API（链式/函数式）
 - ✅ `from_label(label)` - 按 label 全表扫描
@@ -87,7 +89,7 @@ cargo bench
 
 ### Rust API
 ```rust
-use rust_graphdb::{GraphDatabase, query::Query, values::{Properties, Value}};
+use rs_graphdb::{GraphDatabase, query::Query, values::{Properties, Value}};
 
 let mut db = GraphDatabase::new_in_memory();
 
@@ -107,7 +109,7 @@ let result = Query::new(&db)
 
 ### Cypher
 ```rust
-use rust_graphdb::cypher;
+use rs_graphdb::cypher;
 
 let cypher_str = r#"MATCH (a:User {name: "Alice"})-[:FRIEND]->(b) RETURN b"#;
 let query = cypher::parse_cypher(cypher_str)?;
@@ -132,7 +134,7 @@ curl -X POST http://127.0.0.1:3000/query \
 2. 访问：http://127.0.0.1:3000/ui
 3. 使用可视化界面创建和查询图数据
 
-## 🚀 下一步改进方向
+## 🚀 下一步
 
 ### 短期（优先级高）
 - [ ] 修复查询优化器（索引选择策略）
@@ -141,8 +143,8 @@ curl -X POST http://127.0.0.1:3000/query \
 - [ ] Cypher 支持多模式匹配
 
 ### 中期
-- [ ] 持久化存储（sled/SQLite）
-- [ ] WAL（Write-Ahead Log）
+- [x] 持久化存储（sled）
+- [x] WAL（Write-Ahead Log）sled的功能
 - [ ] 事务支持（ACID）
 - [ ] 并发查询（读锁/写锁）
 
@@ -152,28 +154,6 @@ curl -X POST http://127.0.0.1:3000/query \
 - [ ] Bolt 协议支持
 - [ ] 图算法库（最短路、中心性等）
 - [ ] 全文搜索集成
-
-## 📦 项目结构
-
-```
-rust-graphdb/
-├── src/
-│   ├── values/          # 值类型
-│   ├── storage/         # 存储引擎
-│   ├── graph/           # 图 API
-│   ├── index.rs         # 属性索引
-│   ├── index_schema.rs  # 索引配置
-│   ├── query.rs         # 链式查询
-│   ├── cypher/          # Cypher parser & executor
-│   ├── server.rs        # HTTP 服务
-│   └── lib.rs
-├── static/
-│   └── index.html       # Web UI
-├── tests/               # 集成测试
-├── benches/             # 性能基准
-└── examples/
-    └── demo_server.rs   # 服务器示例
-```
 
 ## 🧪 测试
 

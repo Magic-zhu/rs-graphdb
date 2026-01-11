@@ -1,5 +1,5 @@
-use rust_graphdb::{ConcurrentGraphDB, GraphDatabase};
-use rust_graphdb::values::{Properties, Value};
+use rs_graphdb::{ConcurrentGraphDB, GraphDatabase};
+use rs_graphdb::values::{Properties, Value};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::thread;

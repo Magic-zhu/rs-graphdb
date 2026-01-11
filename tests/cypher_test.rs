@@ -1,5 +1,5 @@
-use rust_graphdb::{GraphDatabase, cypher};
-use rust_graphdb::values::{Properties, Value};
+use rs_graphdb::{GraphDatabase, cypher};
+use rs_graphdb::values::{Properties, Value};
 
 fn make_user(name: &str) -> Properties {
     let mut props = Properties::new();
