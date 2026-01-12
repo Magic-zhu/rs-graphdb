@@ -1,8 +1,12 @@
 pub mod mem_store;
 pub mod sled_store;
+pub mod buffered_sled_store;
+pub mod hybrid_store;
 pub mod async_store;
 
 pub use async_store::AsyncStorage;
+pub use buffered_sled_store::{BufferedSledStore, BufferConfig, BufferStats};
+pub use hybrid_store::{HybridStore, HybridConfig, CacheConfig, FlushStrategy, HybridStats, CacheStats};
 
 use crate::values::Value;
 use std::collections::HashMap;
