@@ -1,5 +1,5 @@
 <template>
-  <div class="flex h-full">
+  <div class="flex flex-1 min-h-0">
     <!-- Sidebar -->
     <aside class="w-80 bg-gray-900 border-r border-gray-800 flex flex-col shrink-0">
       <!-- Tabs -->
@@ -247,12 +247,38 @@
               </div>
             </div>
           </PanelSection>
+
+          <PanelSection title="查询结果">
+            <div v-if="queryResults.length === 0" class="text-sm text-gray-500 text-center py-4">
+              暂无查询结果
+            </div>
+            <div v-else class="space-y-1 max-h-64 overflow-y-auto">
+              <div
+                v-for="node in queryResults"
+                :key="node.id"
+                @click="selectNode(node.id)"
+                class="flex justify-between items-start p-2 rounded hover:bg-gray-800 cursor-pointer transition-colors"
+              >
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center gap-2">
+                    <span class="text-gray-500 text-xs">#{{ node.id }}</span>
+                    <span class="text-gray-300 text-sm font-medium truncate">{{ node.labels.join(', ') }}</span>
+                  </div>
+                  <div v-if="node.properties && Object.keys(node.properties).length > 0" class="mt-1">
+                    <div class="text-xs text-gray-500 truncate">
+                      {{ formatNodeProperties(node.properties) }}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </PanelSection>
         </div>
       </div>
     </aside>
 
     <!-- Graph Container -->
-    <main class="flex-1 flex flex-col relative">
+    <main class="flex-1 flex flex-col relative min-w-0">
       <!-- Toolbar -->
       <div class="h-12 bg-gray-900 border-b border-gray-800 flex items-center px-4 gap-2 shrink-0">
         <input
@@ -272,7 +298,7 @@
       </div>
 
       <!-- Graph View -->
-      <div class="flex-1 relative">
+      <div class="flex-1 relative min-h-0 min-w-0">
         <GraphView ref="graphViewRef" @closeDetails="visStore.selectNode(null)" />
         <NodeDetails
           :visible="visStore.selectedNodeId !== null"
@@ -292,6 +318,8 @@ import { useGraphStore } from '@/stores/graph'
 import { useVisualizationStore } from '@/stores/visualization'
 import GraphView from '@/components/GraphView.vue'
 import NodeDetails from '@/components/NodeDetails.vue'
+import PanelSection from '@/components/PanelSection.vue'
+import StatRow from '@/components/StatRow.vue'
 
 const graphStore = useGraphStore()
 const visStore = useVisualizationStore()
@@ -340,6 +368,9 @@ const queryPropMessageType = ref<'success' | 'error'>('success')
 const globalSearchQuery = ref('')
 const searchMessage = ref('')
 const searchMessageType = ref<'success' | 'error'>('success')
+
+// Query results
+const queryResults = ref<any[]>([])
 
 // Focus node
 const focusNodeId = ref<number | null>(null)
@@ -463,6 +494,7 @@ async function handleQueryByLabel() {
 
   try {
     const results = await graphStore.queryByLabel(queryLabel.value)
+    queryResults.value = results
     showMessage('queryLabel', 'success', `找到 ${results.length} 个节点`)
     visualizeResults(results)
   } catch (err) {
@@ -482,6 +514,7 @@ async function handleQueryByProperty() {
       queryPropName.value,
       queryPropValue.value
     )
+    queryResults.value = results
     showMessage('queryProp', 'success', `找到 ${results.length} 个节点`)
     visualizeResults(results)
   } catch (err) {
@@ -497,6 +530,7 @@ async function handleGlobalSearch() {
 
   try {
     const results = await graphStore.searchNodes(globalSearchQuery.value)
+    queryResults.value = results
     showMessage('search', 'success', `找到 ${results.length} 个匹配节点`)
     visualizeResults(results)
   } catch (err) {
@@ -565,31 +599,16 @@ function parseJson(str: string): Record<string, any> | null {
   }
 }
 
+function formatNodeProperties(props: Record<string, any>): string {
+  if (!props) return ''
+  const entries = Object.entries(props).slice(0, 3) // 只显示前3个属性
+  return entries.map(([k, v]) => `${k}: ${JSON.stringify(v)}`).join(', ') +
+    (Object.keys(props).length > 3 ? '...' : '')
+}
+
 onMounted(() => {
   refreshStats()
 })
-</script>
-
-<script lang="ts">
-const PanelSection = {
-  props: ['title'],
-  template: `
-    <div class="panel">
-      <h3 class="text-sm font-semibold text-gray-300 mb-3">{{ title }}</h3>
-      <slot />
-    </div>
-  `,
-}
-
-const StatRow = {
-  props: ['label', 'value'],
-  template: `
-    <div class="flex justify-between items-center py-1 text-sm">
-      <span class="text-gray-500">{{ label }}</span>
-      <span class="text-primary-400 font-semibold">{{ value }}</span>
-    </div>
-  `,
-}
 </script>
 
 <style scoped>

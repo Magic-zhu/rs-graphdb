@@ -1,116 +1,333 @@
 <template>
-  <div ref="containerRef" class="w-full h-full bg-gray-950"></div>
+  <div ref="containerRef" class="w-full h-full absolute inset-0 bg-gray-950 graph-container"></div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch } from 'vue'
-import { Network } from 'vis-network/standalone'
+import { Graph } from '@antv/g6'
 import { useVisualizationStore } from '@/stores/visualization'
-
-interface VisNetworkData {
-  nodes: any[]
-  edges: any[]
-}
-
-interface ClickParams {
-  nodes: number[]
-}
 
 const containerRef = ref<HTMLElement>()
 const visStore = useVisualizationStore()
 
-let network: Network | null = null
+let graph: Graph | null = null
+let resizeObserver: ResizeObserver | null = null
 
-const options = {
-  nodes: {
-    shape: 'dot',
-    size: 25,
-    font: { size: 14, color: '#e5e7eb' },
-    borderWidth: 2,
-    color: {
-      border: '#3b82f6',
-      background: '#1d4ed8',
-      highlight: { border: '#3b82f6', background: '#2563eb' },
+// 获取容器尺寸
+function getContainerSize() {
+  if (!containerRef.value) return { width: 800, height: 600 }
+  return {
+    width: containerRef.value.clientWidth,
+    height: containerRef.value.clientHeight,
+  }
+}
+
+// 调整图表尺寸
+function resizeGraph() {
+  if (!graph || !containerRef.value) return
+  const { width, height } = getContainerSize()
+  console.log('Resizing graph to:', { width, height })
+  graph.resize(width, height)
+}
+
+// 设置节点状态
+function setNodeState(id: string, state: string, value: boolean) {
+  if (!graph) return
+  try {
+    const nodeData = graph.getNodeData(id) as any
+    if (nodeData) {
+      const states = value
+        ? [...(nodeData.states || []), state]
+        : (nodeData.states || []).filter((s: string) => s !== state)
+      graph.updateNodeData([{ id, style: { states } }])
+    }
+  } catch (error) {
+    console.error('Error setting node state:', error)
+  }
+}
+
+// 设置边状态
+function setEdgeState(id: string, state: string, value: boolean) {
+  if (!graph) return
+  try {
+    const edgeData = graph.getEdgeData(id) as any
+    if (edgeData) {
+      const states = value
+        ? [...(edgeData.states || []), state]
+        : (edgeData.states || []).filter((s: string) => s !== state)
+      graph.updateEdgeData([{ id, style: { states } }])
+    }
+  } catch (error) {
+    console.error('Error setting edge state:', error)
+  }
+}
+
+// 更新图表数据
+async function updateGraph() {
+  if (!graph) return
+
+  const nodesArray = Array.from(visStore.nodes.values()).map((n) => ({
+    id: n.id.toString(),
+    data: {
+      label: n.label,
+      title: n.title,
     },
-  },
-  edges: {
-    width: 2,
-    color: { color: '#4b5563', highlight: '#3b82f6' },
-    arrows: { to: { enabled: true, scaleFactor: 0.6 } },
-    font: { size: 12, color: '#9ca3af', align: 'top' },
-  },
-  physics: {
-    enabled: true,
-    barnesHut: { gravitationalConstant: -12000, springLength: 200 },
-  },
+    style: n.color ? { fill: n.color } : {},
+  }))
+
+  const edgesArray = Array.from(visStore.edges.values()).map((e) => ({
+    id: e.id,
+    source: e.from.toString(),
+    target: e.to.toString(),
+    data: {
+      label: e.label,
+    },
+    style: e.color ? { stroke: e.color } : {},
+  }))
+
+  console.log('Updating graph:', { nodes: nodesArray.length, edges: edgesArray.length })
+  console.log('Edges data:', edgesArray.slice(0, 5))
+
+  try {
+    // 清空现有数据
+    graph.clear()
+
+    // 先添加节点数据
+    if (nodesArray.length > 0) {
+      graph.addNodeData(nodesArray)
+    }
+
+    // 渲染节点
+    await graph.draw()
+
+    // 等待一帧确保节点完全渲染
+    await new Promise(resolve => requestAnimationFrame(resolve))
+
+    // 再添加边数据
+    if (edgesArray.length > 0) {
+      graph.addEdgeData(edgesArray)
+    }
+
+    // 最终渲染
+    await graph.draw()
+
+    // 调试：检查渲染后的数据
+    const renderedNodes = graph.getNodeData()
+    const renderedEdges = graph.getEdgeData()
+    console.log('Rendered:', {
+      nodes: Array.isArray(renderedNodes) ? renderedNodes.length : 0,
+      edges: Array.isArray(renderedEdges) ? renderedEdges.length : 0,
+    })
+
+    // 重新设置选中状态
+    if (visStore.selectedNodeId !== null) {
+      setNodeState(visStore.selectedNodeId.toString(), 'selected', true)
+    }
+  } catch (error) {
+    console.error('Error updating graph:', error)
+    console.error('Error details:', error)
+  }
 }
 
 onMounted(() => {
   if (!containerRef.value) return
 
-  const data: VisNetworkData = {
-    nodes: [],
-    edges: [],
-  }
+  const { width, height } = getContainerSize()
+  console.log('Initializing graph with size:', { width, height })
 
-  network = new Network(containerRef.value, data, options)
-
-  // Handle node click
-  network.on('click', (params: ClickParams) => {
-    if (params.nodes.length > 0) {
-      visStore.selectNode(params.nodes[0])
-    } else {
-      visStore.selectNode(null)
-    }
+  // 创建 G6 图实例
+  graph = new Graph({
+    container: containerRef.value,
+    width,
+    height,
+    padding: 20,
+    node: {
+      style: {
+        size: 35,
+        labelText: (d: any) => d.data?.label || '',
+        labelFill: '#e5e7eb',
+        labelFontSize: 12,
+        labelMaxWidth: 150,
+        fill: '#1d4ed8',
+        stroke: '#3b82f6',
+        strokeWidth: 2,
+      },
+      state: {
+        hover: {
+          halo: true,
+          haloLineWidth: 8,
+          haloStroke: '#3b82f6',
+          haloOpacity: 0.3,
+        },
+        selected: {
+          fill: '#2563eb',
+          stroke: '#3b82f6',
+          haloLineWidth: 8,
+          haloStroke: '#3b82f6',
+          haloOpacity: 0.5,
+        },
+      },
+    },
+    edge: {
+      style: {
+        stroke: '#6b7280',
+        lineWidth: 2,
+        endArrow: true,
+        endArrowType: 'triangle',
+        endArrowSize: 12,
+        labelText: (d: any) => d.data?.label || '',
+        labelFill: '#9ca3af',
+        labelFontSize: 11,
+        labelBackground: true,
+        labelBackgroundFill: '#1f2937',
+        labelBackgroundRadius: 4,
+        labelPadding: [2, 4],
+        labelMaxWidth: 100,
+      },
+      state: {
+        hover: {
+          stroke: '#3b82f6',
+          lineWidth: 3,
+        },
+        selected: {
+          stroke: '#3b82f6',
+          lineWidth: 3,
+        },
+      },
+    },
+    layout: {
+      type: 'force',
+      preventOverlap: true,
+      nodeSpacing: 50,
+      linkDistance: 150,
+    },
+    behaviors: [
+      {
+        type: 'zoom-canvas',
+        enableOptimize: true,
+        optimizeZoom: 0.01,
+      },
+      {
+        type: 'drag-canvas',
+      },
+      {
+        type: 'drag-element',
+      },
+    ],
   })
 
-  // Watch for store changes and update network
+  console.log('Graph initialized')
+
+  // 监听节点点击事件
+  graph.on('node:click', (event) => {
+    const nodeId = event.itemId as string
+    console.log('Node clicked:', nodeId)
+    visStore.selectNode(parseInt(nodeId, 10))
+  })
+
+  // 监听画布点击事件（取消选择）
+  graph.on('canvas:click', () => {
+    visStore.selectNode(null)
+  })
+
+  // 监听节点悬停事件
+  graph.on('node:mouseenter', (event) => {
+    setNodeState(event.itemId, 'hover', true)
+  })
+
+  graph.on('node:mouseleave', (event) => {
+    setNodeState(event.itemId, 'hover', false)
+  })
+
+  // 监听边悬停事件
+  graph.on('edge:mouseenter', (event) => {
+    setEdgeState(event.itemId, 'hover', true)
+  })
+
+  graph.on('edge:mouseleave', (event) => {
+    setEdgeState(event.itemId, 'hover', false)
+  })
+
+  // 监听 store 变化并更新图表
   watch(
     () => [visStore.nodes, visStore.edges] as const,
-    ([nodesMap, edgesMap]) => {
-      if (!network) return
-
-      const nodesArray = Array.from(nodesMap.values()).map((n) => ({
-        id: n.id,
-        label: n.label,
-        title: n.title,
-      }))
-
-      const edgesArray = Array.from(edgesMap.values()).map((e) => ({
-        id: e.id,
-        from: e.from,
-        to: e.to,
-        label: e.label,
-      }))
-
-      network.setData({ nodes: nodesArray, edges: edgesArray })
+    () => {
+      updateGraph()
     },
     { deep: true }
   )
 
+  // 监听选中的节点
   watch(
-    () => visStore.physicsEnabled,
-    (enabled) => {
-      if (network) {
-        network.setOptions({ physics: { enabled } })
+    () => visStore.selectedNodeId,
+    (id) => {
+      if (!graph) return
+
+      // 清除所有选中状态
+      const nodeData = graph.getNodeData()
+      const edgeData = graph.getEdgeData()
+
+      if (Array.isArray(nodeData)) {
+        nodeData.forEach((node: any) => {
+          setNodeState(node.id, 'selected', false)
+        })
+      }
+      if (Array.isArray(edgeData)) {
+        edgeData.forEach((edge: any) => {
+          setEdgeState(edge.id, 'selected', false)
+        })
+      }
+
+      // 设置新选中的节点
+      if (id !== null) {
+        const idStr = id.toString()
+        setNodeState(idStr, 'selected', true)
+        // 聚焦到选中的节点
+        graph.focusElement(idStr, true, {
+          duration: 300,
+          easing: 'ease-cubic',
+        })
       }
     }
   )
-})
 
-onUnmounted(() => {
-  if (network) {
-    network.destroy()
-    network = null
+  // 使用 ResizeObserver 监听容器尺寸变化
+  resizeObserver = new ResizeObserver(() => {
+    resizeGraph()
+  })
+  if (containerRef.value) {
+    resizeObserver.observe(containerRef.value)
   }
 })
 
-// Expose methods
+onUnmounted(() => {
+  if (resizeObserver) {
+    resizeObserver.disconnect()
+    resizeObserver = null
+  }
+  if (graph) {
+    graph.destroy()
+    graph = null
+  }
+})
+
+// 暴露方法
 defineExpose({
-  fit: () => network?.fit(),
+  fit: () => {
+    if (graph) {
+      graph.fitView()
+    }
+  },
   focus: (id: number) => {
-    network?.selectNodes([id])
-    network?.focus(id, { animation: true, scale: 1.2 })
+    if (graph) {
+      visStore.selectNode(id)
+    }
   },
 })
 </script>
+
+<style scoped>
+.graph-container {
+  min-height: 100%;
+}
+</style>

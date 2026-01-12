@@ -9,7 +9,7 @@ export default defineConfig({
       "@": resolve(__dirname, "src"),
     },
   },
-  base: "/ui",
+  base: "./",
   build: {
     outDir: "../static",
     emptyOutDir: true,
