@@ -7,6 +7,11 @@ import { ref, onMounted, onUnmounted, watch } from 'vue'
 import { Graph } from '@antv/g6'
 import { useVisualizationStore } from '@/stores/visualization'
 
+const emit = defineEmits<{
+  'closeDetails': []
+  'expandNeighbors': [nodeId: number]
+}>()
+
 const containerRef = ref<HTMLElement>()
 const visStore = useVisualizationStore()
 
@@ -34,7 +39,11 @@ function resizeGraph() {
 function setNodeState(id: string, state: string, value: boolean) {
   if (!graph) return
   try {
-    const nodeData = graph.getNodeData(id) as any
+    const allNodeData = graph.getNodeData() as any
+    const nodeData = Array.isArray(allNodeData)
+      ? allNodeData.find((n: any) => n.id === id)
+      : allNodeData
+
     if (nodeData) {
       const states = value
         ? [...(nodeData.states || []), state]
@@ -50,7 +59,11 @@ function setNodeState(id: string, state: string, value: boolean) {
 function setEdgeState(id: string, state: string, value: boolean) {
   if (!graph) return
   try {
-    const edgeData = graph.getEdgeData(id) as any
+    const allEdgeData = graph.getEdgeData() as any
+    const edgeData = Array.isArray(allEdgeData)
+      ? allEdgeData.find((e: any) => e.id === id)
+      : allEdgeData
+
     if (edgeData) {
       const states = value
         ? [...(edgeData.states || []), state]
@@ -136,7 +149,8 @@ onMounted(() => {
   console.log('Initializing graph with size:', { width, height })
 
   // 创建 G6 图实例
-  graph = new Graph({
+  const GraphConstructor = Graph as any
+  graph = new GraphConstructor({
     container: containerRef.value,
     width,
     height,
@@ -218,35 +232,44 @@ onMounted(() => {
 
   console.log('Graph initialized')
 
-  // 监听节点点击事件
-  graph.on('node:click', (event) => {
-    const nodeId = event.itemId as string
-    console.log('Node clicked:', nodeId)
-    visStore.selectNode(parseInt(nodeId, 10))
-  })
+  if (graph) {
+    // 监听节点点击事件
+    graph.on('node:click', (event: any) => {
+      const nodeId = event.itemId as string
+      console.log('Node clicked:', nodeId)
+      visStore.selectNode(parseInt(nodeId, 10))
+    })
 
-  // 监听画布点击事件（取消选择）
-  graph.on('canvas:click', () => {
-    visStore.selectNode(null)
-  })
+    // 监听节点双击事件 - 展开邻居
+    graph.on('node:dblclick', (event: any) => {
+      const nodeId = event.itemId as string
+      console.log('Node double clicked:', nodeId)
+      emit('expandNeighbors', parseInt(nodeId, 10))
+    })
 
-  // 监听节点悬停事件
-  graph.on('node:mouseenter', (event) => {
-    setNodeState(event.itemId, 'hover', true)
-  })
+    // 监听画布点击事件（取消选择）
+    graph.on('canvas:click', () => {
+      visStore.selectNode(null)
+    })
 
-  graph.on('node:mouseleave', (event) => {
-    setNodeState(event.itemId, 'hover', false)
-  })
+    // 监听节点悬停事件
+    graph.on('node:mouseenter', (event: any) => {
+      setNodeState(event.itemId, 'hover', true)
+    })
 
-  // 监听边悬停事件
-  graph.on('edge:mouseenter', (event) => {
-    setEdgeState(event.itemId, 'hover', true)
-  })
+    graph.on('node:mouseleave', (event: any) => {
+      setNodeState(event.itemId, 'hover', false)
+    })
 
-  graph.on('edge:mouseleave', (event) => {
-    setEdgeState(event.itemId, 'hover', false)
-  })
+    // 监听边悬停事件
+    graph.on('edge:mouseenter', (event: any) => {
+      setEdgeState(event.itemId, 'hover', true)
+    })
+
+    graph.on('edge:mouseleave', (event: any) => {
+      setEdgeState(event.itemId, 'hover', false)
+    })
+  }
 
   // 监听 store 变化并更新图表
   watch(

@@ -7,6 +7,8 @@ pub enum Value {
     Bool(bool),
     Text(String),
     Float(f64),
+    Null,
+    List(Vec<Value>),
 }
 
 pub type Properties = HashMap<String, Value>;

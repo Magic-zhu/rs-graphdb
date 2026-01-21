@@ -435,6 +435,8 @@ impl CacheLayer {
                 Value::Bool(_) => 1,
                 Value::Text(s) => s.len(),
                 Value::Float(_) => 8,
+                Value::Null => 0,
+                Value::List(v) => v.len() * 8,
             };
         }
 
@@ -457,6 +459,8 @@ impl CacheLayer {
                 Value::Bool(_) => 1,
                 Value::Text(s) => s.len(),
                 Value::Float(_) => 8,
+                Value::Null => 0,
+                Value::List(v) => v.len() * 8,
             };
         }
 

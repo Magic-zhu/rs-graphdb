@@ -75,6 +75,10 @@ export interface UpdateNodeRequest {
   properties: Record<string, string | number | boolean>
 }
 
+export interface UpdateRelRequest {
+  properties: Record<string, string | number | boolean>
+}
+
 export interface BatchCreateNodesRequest {
   nodes: Array<[string[], Record<string, string | number | boolean>]>
 }
@@ -142,6 +146,11 @@ export const api = {
   createRel: (data: CreateRelRequest) =>
     request<CreateRelResponse>('/rels', {
       method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  updateRel: (id: number, data: UpdateRelRequest) =>
+    request(`/rels/${id}`, {
+      method: 'PUT',
       body: JSON.stringify(data),
     }),
   deleteRel: (id: number) =>

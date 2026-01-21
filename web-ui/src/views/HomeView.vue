@@ -1,6 +1,6 @@
 <template>
   <div class="flex flex-1 min-h-0">
-    <!-- Sidebar -->
+    <!-- Left Sidebar -->
     <aside class="w-80 bg-gray-900 border-r border-gray-800 flex flex-col shrink-0">
       <!-- Tabs -->
       <div class="flex border-b border-gray-800">
@@ -21,6 +21,11 @@
 
       <!-- Tab Content -->
       <div class="flex-1 overflow-y-auto p-4">
+        <!-- Query Tab -->
+        <div v-if="activeTab === 'query'" class="space-y-4">
+          <CodeMirrorEditor @execute="handleExecuteQuery" />
+        </div>
+
         <!-- Dashboard Tab -->
         <div v-if="activeTab === 'dashboard'" class="space-y-4">
           <PanelSection title="数据库统计">
@@ -65,6 +70,11 @@
               </span>
             </div>
           </PanelSection>
+        </div>
+
+        <!-- System Info Tab -->
+        <div v-if="activeTab === 'system'" class="space-y-4">
+          <SystemInfo @execute-command="handleExecuteCommand" />
         </div>
 
         <!-- Nodes Tab -->
@@ -188,96 +198,10 @@
             </div>
           </PanelSection>
         </div>
-
-        <!-- Query Tab -->
-        <div v-if="activeTab === 'query'" class="space-y-4">
-          <PanelSection title="按标签查询">
-            <div class="space-y-3">
-              <select v-model="queryLabel" class="input">
-                <option value="">选择标签...</option>
-                <option v-for="label in graphStore.labels" :key="label" :value="label">
-                  {{ label }}
-                </option>
-              </select>
-              <button @click="handleQueryByLabel" class="btn btn-primary w-full">查询</button>
-              <div v-if="queryLabelMessage" :class="['status-message', queryLabelMessageType]">
-                {{ queryLabelMessage }}
-              </div>
-            </div>
-          </PanelSection>
-
-          <PanelSection title="按属性查询">
-            <div class="space-y-3">
-              <select v-model="queryPropLabel" class="input">
-                <option value="">选择标签...</option>
-                <option v-for="label in graphStore.labels" :key="label" :value="label">
-                  {{ label }}
-                </option>
-              </select>
-              <input
-                v-model="queryPropName"
-                type="text"
-                class="input"
-                placeholder="属性名"
-              />
-              <input
-                v-model="queryPropValue"
-                type="text"
-                class="input"
-                placeholder="属性值"
-              />
-              <button @click="handleQueryByProperty" class="btn btn-primary w-full">查询</button>
-              <div v-if="queryPropMessage" :class="['status-message', queryPropMessageType]">
-                {{ queryPropMessage }}
-              </div>
-            </div>
-          </PanelSection>
-
-          <PanelSection title="全局搜索">
-            <div class="space-y-3">
-              <input
-                v-model="globalSearchQuery"
-                type="text"
-                class="input"
-                placeholder="搜索节点标签或属性..."
-              />
-              <button @click="handleGlobalSearch" class="btn btn-primary w-full">搜索</button>
-              <div v-if="searchMessage" :class="['status-message', searchMessageType]">
-                {{ searchMessage }}
-              </div>
-            </div>
-          </PanelSection>
-
-          <PanelSection title="查询结果">
-            <div v-if="queryResults.length === 0" class="text-sm text-gray-500 text-center py-4">
-              暂无查询结果
-            </div>
-            <div v-else class="space-y-1 max-h-64 overflow-y-auto">
-              <div
-                v-for="node in queryResults"
-                :key="node.id"
-                @click="selectNode(node.id)"
-                class="flex justify-between items-start p-2 rounded hover:bg-gray-800 cursor-pointer transition-colors"
-              >
-                <div class="flex-1 min-w-0">
-                  <div class="flex items-center gap-2">
-                    <span class="text-gray-500 text-xs">#{{ node.id }}</span>
-                    <span class="text-gray-300 text-sm font-medium truncate">{{ node.labels.join(', ') }}</span>
-                  </div>
-                  <div v-if="node.properties && Object.keys(node.properties).length > 0" class="mt-1">
-                    <div class="text-xs text-gray-500 truncate">
-                      {{ formatNodeProperties(node.properties) }}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </PanelSection>
-        </div>
       </div>
     </aside>
 
-    <!-- Graph Container -->
+    <!-- Main Content -->
     <main class="flex-1 flex flex-col relative min-w-0">
       <!-- Toolbar -->
       <div class="h-12 bg-gray-900 border-b border-gray-800 flex items-center px-4 gap-2 shrink-0">
@@ -292,23 +216,78 @@
         <button @click="togglePhysics" class="btn btn-secondary">
           {{ visStore.physicsEnabled ? '禁用物理' : '启用物理' }}
         </button>
-        <span v-if="visStore.selectedNodeId" class="ml-auto text-sm text-gray-500">
+        <div class="ml-auto flex items-center gap-2">
+          <button
+            @click="showVisualizationControls = !showVisualizationControls"
+            :class="[
+              'px-3 py-1.5 text-sm rounded transition-colors',
+              showVisualizationControls
+                ? 'bg-primary-600 text-white'
+                : 'bg-gray-700 text-gray-300 hover:bg-gray-600',
+            ]"
+          >
+            可视化设置
+          </button>
+          <button
+            @click="showExportDialog = true"
+            class="px-3 py-1.5 bg-gray-700 text-gray-300 text-sm rounded hover:bg-gray-600 transition-colors"
+          >
+            导出
+          </button>
+        </div>
+        <span v-if="visStore.selectedNodeId" class="text-sm text-gray-500">
           选中: 节点 #{{ visStore.selectedNodeId }}
         </span>
       </div>
 
-      <!-- Graph View -->
-      <div class="flex-1 relative min-h-0 min-w-0">
-        <GraphView ref="graphViewRef" @closeDetails="visStore.selectNode(null)" />
-        <NodeDetails
-          :visible="visStore.selectedNodeId !== null"
-          :nodeId="visStore.selectedNodeId"
-          @close="visStore.selectNode(null)"
-          @focus="handleFocusNode"
-          @showNeighbors="handleShowNeighbors"
+      <!-- Graph View & Visualization Controls -->
+      <div class="flex-1 flex relative min-h-0 min-w-0">
+        <!-- Graph Container -->
+        <div class="flex-1 relative min-h-0 min-w-0">
+          <!-- Graph View -->
+          <GraphView
+            v-show="resultViewMode === 'graph'"
+            ref="graphViewRef"
+            @closeDetails="visStore.selectNode(null)"
+            @expandNeighbors="handleExpandNeighbors"
+          />
+          <NodeDetails
+            v-show="resultViewMode === 'graph'"
+            :visible="visStore.selectedNodeId !== null"
+            :nodeId="visStore.selectedNodeId"
+            @close="visStore.selectNode(null)"
+            @focus="handleFocusNode"
+            @showNeighbors="handleShowNeighbors"
+          />
+
+          <!-- Table View -->
+          <TableView
+            v-show="resultViewMode === 'table'"
+            :viewMode="resultViewMode"
+            :data="queryResults"
+            :loading="queryLoading"
+            :error="queryError"
+            @change-view="resultViewMode = $event"
+            @focus-node="handleFocusNode"
+          />
+        </div>
+
+        <!-- Visualization Controls Panel -->
+        <VisualizationControls
+          v-if="showVisualizationControls && resultViewMode === 'graph'"
+          @fit-view="handleFitGraph"
+          @zoom-in="handleZoomIn"
+          @zoom-out="handleZoomOut"
+          @reset-view="handleResetView"
+          @show-export="showExportDialog = true"
+          @layout-change="handleLayoutChange"
+          @style-change="handleStyleChange"
         />
       </div>
     </main>
+
+    <!-- Export Dialog -->
+    <ExportDialog v-model:visible="showExportDialog" @close="showExportDialog = false" />
   </div>
 </template>
 
@@ -316,23 +295,38 @@
 import { ref, computed, onMounted } from 'vue'
 import { useGraphStore } from '@/stores/graph'
 import { useVisualizationStore } from '@/stores/visualization'
+import { useCommandStore } from '@/stores/commands'
 import GraphView from '@/components/GraphView.vue'
 import NodeDetails from '@/components/NodeDetails.vue'
 import PanelSection from '@/components/PanelSection.vue'
 import StatRow from '@/components/StatRow.vue'
+import CodeMirrorEditor from '@/components/CodeMirrorEditor.vue'
+import SystemInfo from '@/components/SystemInfo.vue'
+import VisualizationControls from '@/components/VisualizationControls.vue'
+import ExportDialog from '@/components/ExportDialog.vue'
+import TableView from '@/components/TableView.vue'
 
 const graphStore = useGraphStore()
 const visStore = useVisualizationStore()
+const { executeCommand, isCommand } = useCommandStore()
+
 const graphViewRef = ref<InstanceType<typeof GraphView>>()
+const showVisualizationControls = ref(false)
+const showExportDialog = ref(false)
+const resultViewMode = ref<'graph' | 'table'>('graph')
+const queryResults = ref<any[]>([])
+const queryLoading = ref(false)
+const queryError = ref('')
 
 // Tabs
 const tabs = [
+  { key: 'query', label: '查询' },
   { key: 'dashboard', label: '仪表盘' },
+  { key: 'system', label: '系统' },
   { key: 'nodes', label: '节点' },
   { key: 'relations', label: '关系' },
-  { key: 'query', label: '查询' },
 ]
-const activeTab = ref('dashboard')
+const activeTab = ref('query')
 
 // Node form
 const nodeForm = ref({
@@ -353,24 +347,6 @@ const relForm = ref({
   message: '',
   messageType: 'success' as 'success' | 'error',
 })
-
-// Query
-const queryLabel = ref('')
-const queryLabelMessage = ref('')
-const queryLabelMessageType = ref<'success' | 'error'>('success')
-
-const queryPropLabel = ref('')
-const queryPropName = ref('')
-const queryPropValue = ref('')
-const queryPropMessage = ref('')
-const queryPropMessageType = ref<'success' | 'error'>('success')
-
-const globalSearchQuery = ref('')
-const searchMessage = ref('')
-const searchMessageType = ref<'success' | 'error'>('success')
-
-// Query results
-const queryResults = ref<any[]>([])
 
 // Focus node
 const focusNodeId = ref<number | null>(null)
@@ -418,10 +394,8 @@ async function loadFullGraph() {
 
     visStore.setNodes(visNodes)
     visStore.setEdges(visEdges)
-
-    showMessage('search', 'success', `已加载 ${visNodes.length} 个节点和 ${visEdges.length} 条关系`)
   } catch (err) {
-    showMessage('search', 'error', '加载失败: ' + (err instanceof Error ? err.message : '未知错误'))
+    console.error('Failed to load graph:', err)
   }
 }
 
@@ -486,66 +460,68 @@ async function handleCreateRel() {
   }
 }
 
-async function handleQueryByLabel() {
-  if (!queryLabel.value) {
-    showMessage('queryLabel', 'error', '请选择标签')
+async function handleExecuteQuery(query: string) {
+  // Check if it's a command
+  if (isCommand(query)) {
+    const result = await executeCommand(query)
+    if (!result.success) {
+      alert(result.message)
+    }
     return
   }
 
+  // Execute query
+  queryLoading.value = true
+  queryError.value = ''
+
   try {
-    const results = await graphStore.queryByLabel(queryLabel.value)
-    queryResults.value = results
-    showMessage('queryLabel', 'success', `找到 ${results.length} 个节点`)
-    visualizeResults(results)
+    // Parse query to extract label and property/value
+    const labelMatch = query.match(/FROM\s+(\w+)/i)
+    const propMatch = query.match(/WHERE\s+(\w+)\s*=\s*['"]([^'"]+)['"]/i)
+
+    if (labelMatch) {
+      const label = labelMatch[1]
+      const property = propMatch ? propMatch[1] : undefined
+      const value = propMatch ? propMatch[2] : undefined
+
+      const results = await graphStore.queryByLabel(label, property, value)
+      queryResults.value = results
+      resultViewMode.value = 'graph'
+
+      // Also update visualization
+      const visNodes = results.map((n: any) => ({
+        id: n.id,
+        label: (n.properties.name as string) || `${n.labels[0]} #${n.id}`,
+        title: `ID: ${n.id}\nLabels: ${n.labels.join(', ')}`,
+      }))
+
+      const visEdges: any[] = []
+      for (const node of results) {
+        const neighbors = await graphStore.fetchNeighbors(node.id)
+        neighbors.outgoing.forEach((targetId: number) => {
+          visEdges.push({
+            id: `${node.id}-${targetId}`,
+            from: node.id,
+            to: targetId,
+            label: 'CONNECTS',
+          })
+        })
+      }
+
+      visStore.setNodes(visNodes)
+      visStore.setEdges(visEdges)
+    } else {
+      queryError.value = '无法解析查询。请使用格式: FROM <Label> [WHERE <property> = <value>]'
+    }
   } catch (err) {
-    showMessage('queryLabel', 'error', '查询失败: ' + (err instanceof Error ? err.message : '未知错误'))
+    queryError.value = err instanceof Error ? err.message : '查询失败'
+  } finally {
+    queryLoading.value = false
   }
 }
 
-async function handleQueryByProperty() {
-  if (!queryPropLabel.value || !queryPropName.value || !queryPropValue.value) {
-    showMessage('queryProp', 'error', '请填写完整')
-    return
-  }
-
-  try {
-    const results = await graphStore.queryByProperty(
-      queryPropLabel.value,
-      queryPropName.value,
-      queryPropValue.value
-    )
-    queryResults.value = results
-    showMessage('queryProp', 'success', `找到 ${results.length} 个节点`)
-    visualizeResults(results)
-  } catch (err) {
-    showMessage('queryProp', 'error', '查询失败: ' + (err instanceof Error ? err.message : '未知错误'))
-  }
-}
-
-async function handleGlobalSearch() {
-  if (!globalSearchQuery.value) {
-    showMessage('search', 'error', '请输入搜索内容')
-    return
-  }
-
-  try {
-    const results = await graphStore.searchNodes(globalSearchQuery.value)
-    queryResults.value = results
-    showMessage('search', 'success', `找到 ${results.length} 个匹配节点`)
-    visualizeResults(results)
-  } catch (err) {
-    showMessage('search', 'error', '搜索失败: ' + (err instanceof Error ? err.message : '未知错误'))
-  }
-}
-
-function visualizeResults(results: any[]) {
-  visStore.clear()
-  const nodes = results.map((n) => ({
-    id: n.id,
-    label: (n.properties.name as string) || `${n.labels[0]} #${n.id}`,
-    title: `ID: ${n.id}\nLabels: ${n.labels.join(', ')}`,
-  }))
-  visStore.setNodes(nodes)
+function handleExecuteCommand(command: string) {
+  handleExecuteQuery(command)
 }
 
 function selectNode(id: number) {
@@ -573,21 +549,84 @@ function handleShowNeighbors(_id: number) {
   // Already handled in NodeDetails component
 }
 
-function showMessage(
-  target: 'queryLabel' | 'queryProp' | 'search',
-  type: 'success' | 'error',
-  message: string
-) {
-  if (target === 'queryLabel') {
-    queryLabelMessage.value = message
-    queryLabelMessageType.value = type
-  } else if (target === 'queryProp') {
-    queryPropMessage.value = message
-    queryPropMessageType.value = type
-  } else {
-    searchMessage.value = message
-    searchMessageType.value = type
+async function handleExpandNeighbors(nodeId: number) {
+  try {
+    const neighbors = await graphStore.fetchNeighbors(nodeId)
+
+    // 获取现有节点 ID 集合
+    const existingNodeIds = new Set(visStore.nodes.keys())
+
+    // 添加出边邻居节点
+    for (const targetId of neighbors.outgoing) {
+      const targetIdNum = typeof targetId === 'string' ? parseInt(targetId, 10) : targetId
+      if (!existingNodeIds.has(targetIdNum)) {
+        const node = await graphStore.fetchNode(targetIdNum)
+        if (node) {
+          visStore.addNode({
+            id: node.id,
+            label: (node.properties.name as string) || `${node.labels[0]} #${node.id}`,
+            title: `ID: ${node.id}\nLabels: ${node.labels.join(', ')}`,
+          })
+        }
+      }
+
+      // 添加边
+      visStore.addEdge({
+        id: `${nodeId}-${targetIdNum}`,
+        from: nodeId,
+        to: targetIdNum,
+        label: 'CONNECTS',
+      })
+    }
+
+    // 添加入边邻居节点
+    for (const sourceId of neighbors.incoming) {
+      const sourceIdNum = typeof sourceId === 'string' ? parseInt(sourceId, 10) : sourceId
+      if (!existingNodeIds.has(sourceIdNum)) {
+        const node = await graphStore.fetchNode(sourceIdNum)
+        if (node) {
+          visStore.addNode({
+            id: node.id,
+            label: (node.properties.name as string) || `${node.labels[0]} #${node.id}`,
+            title: `ID: ${node.id}\nLabels: ${node.labels.join(', ')}`,
+          })
+        }
+      }
+
+      // 添加边
+      visStore.addEdge({
+        id: `${sourceIdNum}-${nodeId}`,
+        from: sourceIdNum,
+        to: nodeId,
+        label: 'CONNECTS',
+      })
+    }
+  } catch (err) {
+    console.error('Failed to expand neighbors:', err)
   }
+}
+
+function handleZoomIn() {
+  // TODO: Implement zoom in
+}
+
+function handleZoomOut() {
+  // TODO: Implement zoom out
+}
+
+function handleResetView() {
+  visStore.clear()
+  handleFitGraph()
+}
+
+function handleLayoutChange(layout: string) {
+  // TODO: Apply layout change
+  console.log('Layout changed to:', layout)
+}
+
+function handleStyleChange(style: any) {
+  // TODO: Apply style changes
+  console.log('Style changed:', style)
 }
 
 function parseJson(str: string): Record<string, any> | null {
@@ -597,13 +636,6 @@ function parseJson(str: string): Record<string, any> | null {
   } catch {
     return null
   }
-}
-
-function formatNodeProperties(props: Record<string, any>): string {
-  if (!props) return ''
-  const entries = Object.entries(props).slice(0, 3) // 只显示前3个属性
-  return entries.map(([k, v]) => `${k}: ${JSON.stringify(v)}`).join(', ') +
-    (Object.keys(props).length > 3 ? '...' : '')
 }
 
 onMounted(() => {

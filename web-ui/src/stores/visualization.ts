@@ -78,6 +78,20 @@ export const useVisualizationStore = defineStore('visualization', () => {
     edges.value.delete(id)
   }
 
+  function updateEdge(id: string, updates: Partial<VisEdge>) {
+    const existing = edges.value.get(id)
+    if (existing) {
+      edges.value.set(id, { ...existing, ...updates })
+    }
+  }
+
+  function updateNode(id: number, updates: Partial<VisNode>) {
+    const existing = nodes.value.get(id)
+    if (existing) {
+      nodes.value.set(id, { ...existing, ...updates })
+    }
+  }
+
   function clear() {
     nodes.value.clear()
     edges.value.clear()
@@ -123,10 +137,12 @@ export const useVisualizationStore = defineStore('visualization', () => {
     setNodes,
     addNode,
     removeNode,
+    updateNode,
     setEdge,
     setEdges,
     addEdge,
     removeEdge,
+    updateEdge,
     clear,
     selectNode,
     togglePhysics,

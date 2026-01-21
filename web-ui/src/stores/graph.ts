@@ -118,9 +118,9 @@ export const useGraphStore = defineStore('graph', () => {
     }
   }
 
-  async function queryByLabel(label: string) {
+  async function queryByLabel(label: string, property?: string, value?: string) {
     try {
-      return await api.query({ label })
+      return await api.query({ label, property, value })
     } catch (err) {
       error.value = err instanceof Error ? err.message : 'Query failed'
       throw err
@@ -132,6 +132,28 @@ export const useGraphStore = defineStore('graph', () => {
       return await api.query({ label, property, value })
     } catch (err) {
       error.value = err instanceof Error ? err.message : 'Query failed'
+      throw err
+    }
+  }
+
+  async function fetchNeighbors(nodeId: number) {
+    try {
+      const neighbors = await api.getNodeNeighbors(nodeId)
+      return {
+        outgoing: neighbors.outgoing,
+        incoming: neighbors.incoming,
+      }
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : 'Failed to fetch neighbors'
+      throw err
+    }
+  }
+
+  async function fetchNode(nodeId: number) {
+    try {
+      return await api.getNode(nodeId)
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : 'Failed to fetch node'
       throw err
     }
   }
@@ -173,6 +195,8 @@ export const useGraphStore = defineStore('graph', () => {
     deleteRel,
     queryByLabel,
     queryByProperty,
+    fetchNeighbors,
+    fetchNode,
     searchNodes,
     clearError,
   }

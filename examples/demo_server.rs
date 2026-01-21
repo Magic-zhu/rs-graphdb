@@ -9,7 +9,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let db = GraphDatabase::<MemStore>::new_in_memory();
     let db = Arc::new(Mutex::new(db));
     let service = Arc::new(GraphService::new(db));
-    let state = AppState { service };
+    let state = AppState::new(service);
 
     run_server(state, 3000).await?;
     Ok(())

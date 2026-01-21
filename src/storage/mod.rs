@@ -37,7 +37,7 @@ pub enum StorageError {
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
-pub struct TxHandle(u64);
+pub struct TxHandle(pub u64);
 
 pub trait StorageEngine: Send + Sync {
     fn create_node(
@@ -93,5 +93,17 @@ pub trait StorageEngine: Send + Sync {
         rels.into_iter()
             .map(|(start, end, typ, props)| self.create_rel(start, end, typ, props))
             .collect()
+    }
+
+    /// 更新节点属性（合并模式）
+    fn update_node_props(&mut self, id: NodeId, props: HashMap<String, Value>) -> bool {
+        // 默认实现：不支持
+        false
+    }
+
+    /// 更新关系属性（合并模式）
+    fn update_rel_props(&mut self, id: RelId, props: HashMap<String, Value>) -> bool {
+        // 默认实现：不支持
+        false
     }
 }

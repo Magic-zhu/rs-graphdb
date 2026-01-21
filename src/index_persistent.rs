@@ -30,6 +30,8 @@ impl From<&Value> for Option<IndexValue> {
             Value::Bool(b) => Some(IndexValue::Bool(*b)),
             Value::Text(s) => Some(IndexValue::Text(s.clone())),
             Value::Float(_) => None, // Float 不支持精确索引
+            Value::Null => None,     // Null 不支持索引
+            Value::List(_) => None,  // List 不支持索引
         }
     }
 }
@@ -62,6 +64,8 @@ impl PersistentPropertyIndex {
             Value::Bool(b) => IndexValue::Bool(*b),
             Value::Text(s) => IndexValue::Text(s.clone()),
             Value::Float(_) => return Ok(()), // Float 不支持索引
+            Value::Null => return Ok(()),     // Null 不支持索引
+            Value::List(_) => return Ok(()),  // List 不支持索引
         };
 
         let key = self.index_key(label, property, &idx_value);
@@ -93,6 +97,8 @@ impl PersistentPropertyIndex {
             Value::Bool(b) => IndexValue::Bool(*b),
             Value::Text(s) => IndexValue::Text(s.clone()),
             Value::Float(_) => return Ok(()), // Float 不支持索引
+            Value::Null => return Ok(()),     // Null 不支持索引
+            Value::List(_) => return Ok(()),  // List 不支持索引
         };
 
         let key = self.index_key(label, property, &idx_value);
@@ -121,6 +127,8 @@ impl PersistentPropertyIndex {
             Value::Bool(b) => IndexValue::Bool(*b),
             Value::Text(s) => IndexValue::Text(s.clone()),
             Value::Float(_) => return Ok(Vec::new()),
+            Value::Null => return Ok(Vec::new()),
+            Value::List(_) => return Ok(Vec::new()),
         };
 
         let key = self.index_key(label, property, &idx_value);

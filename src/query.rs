@@ -94,6 +94,22 @@ impl<'a, E: StorageEngine> Query<'a, E> {
         self
     }
 
+    /// 按整型属性等于过滤
+    pub fn where_prop_int_eq(mut self, key: &str, expected: i64) -> Self {
+        let mut filtered = Vec::new();
+        for id in self.current.iter().copied() {
+            if let Some(node) = self.db.get_node(id) {
+                if let Some(Value::Int(v)) = node.get(key) {
+                    if *v == expected {
+                        filtered.push(id);
+                    }
+                }
+            }
+        }
+        self.current = filtered;
+        self
+    }
+
     /// 按整型属性 > 某个值过滤
     pub fn where_prop_int_gt(mut self, key: &str, min: i64) -> Self {
         let mut filtered = Vec::new();
@@ -138,6 +154,205 @@ impl<'a, E: StorageEngine> Query<'a, E> {
         self
     }
 
+    /// 可变长度路径遍历（出边）
+    ///
+    /// 从当前节点集合出发，沿着指定类型的关系遍历 min_hops 到 max_hops 跳
+    ///
+    /// # 参数
+    /// - `rel_type`: 关系类型
+    /// - `min_hops`: 最小跳数（inclusive）
+    /// - `max_hops`: 最大跳数（inclusive），None 表示无限制
+    ///
+    /// # 示例
+    /// ```ignore
+    /// // 查找所有在 2-3 跳内可达的朋友
+    /// query.out_variable_length("FRIEND", 2, Some(3))
+    /// ```
+    pub fn out_variable_length(mut self, rel_type: &str, min_hops: usize, max_hops: Option<usize>) -> Self {
+        let mut result = Vec::new();
+        let mut visited = std::collections::HashSet::new();
+
+        for start_id in self.current.iter().copied() {
+            // BFS 遍历，记录每个节点所在的深度
+            let mut queue = std::collections::VecDeque::new();
+
+            // 从起始节点的邻居开始，深度为 1
+            for rel in self.db.neighbors_out(start_id) {
+                if rel.typ == rel_type {
+                    let neighbor = rel.end;
+                    if !visited.contains(&neighbor) {
+                        visited.insert(neighbor);
+                        queue.push_back((neighbor, 1));
+                    }
+                }
+            }
+
+            while let Some((node_id, depth)) = queue.pop_front() {
+                // 如果达到最小跳数，将节点加入结果
+                if depth >= min_hops {
+                    result.push(node_id);
+                }
+
+                // 如果达到最大跳数，停止扩展
+                if let Some(max) = max_hops {
+                    if depth >= max {
+                        continue;
+                    }
+                }
+
+                // 扩展邻接节点
+                for rel in self.db.neighbors_out(node_id) {
+                    if rel.typ == rel_type {
+                        let neighbor = rel.end;
+                        if !visited.contains(&neighbor) {
+                            visited.insert(neighbor);
+                            queue.push_back((neighbor, depth + 1));
+                        }
+                    }
+                }
+            }
+        }
+
+        self.current = result;
+        self
+    }
+
+    /// 可变长度路径遍历（入边）
+    ///
+    /// 从当前节点集合出发，沿着指定类型的关系反向遍历 min_hops 到 max_hops 跳
+    ///
+    /// # 参数
+    /// - `rel_type`: 关系类型
+    /// - `min_hops`: 最小跳数（inclusive）
+    /// - `max_hops`: 最大跳数（inclusive），None 表示无限制
+    pub fn in_variable_length(mut self, rel_type: &str, min_hops: usize, max_hops: Option<usize>) -> Self {
+        let mut result = Vec::new();
+        let mut visited = std::collections::HashSet::new();
+
+        for start_id in self.current.iter().copied() {
+            // BFS 遍历，记录每个节点所在的深度
+            let mut queue = std::collections::VecDeque::new();
+
+            // 从起始节点的入边邻居开始，深度为 1
+            for rel in self.db.neighbors_in(start_id) {
+                if rel.typ == rel_type {
+                    let neighbor = rel.start;
+                    if !visited.contains(&neighbor) {
+                        visited.insert(neighbor);
+                        queue.push_back((neighbor, 1));
+                    }
+                }
+            }
+
+            while let Some((node_id, depth)) = queue.pop_front() {
+                // 如果达到最小跳数，将节点加入结果
+                if depth >= min_hops {
+                    result.push(node_id);
+                }
+
+                // 如果达到最大跳数，停止扩展
+                if let Some(max) = max_hops {
+                    if depth >= max {
+                        continue;
+                    }
+                }
+
+                // 扩展邻接节点（反向）
+                for rel in self.db.neighbors_in(node_id) {
+                    if rel.typ == rel_type {
+                        let neighbor = rel.start;
+                        if !visited.contains(&neighbor) {
+                            visited.insert(neighbor);
+                            queue.push_back((neighbor, depth + 1));
+                        }
+                    }
+                }
+            }
+        }
+
+        self.current = result;
+        self
+    }
+
+    /// 无向可变长度路径遍历
+    ///
+    /// 从当前节点集合出发，沿着指定类型的关系（双向）遍历 min_hops 到 max_hops 跳
+    ///
+    /// # 参数
+    /// - `rel_type`: 关系类型
+    /// - `min_hops`: 最小跳数（inclusive）
+    /// - `max_hops`: 最大跳数（inclusive），None 表示无限制
+    pub fn undirected_variable_length(mut self, rel_type: &str, min_hops: usize, max_hops: Option<usize>) -> Self {
+        let mut result = Vec::new();
+        let mut visited = std::collections::HashSet::new();
+
+        for start_id in self.current.iter().copied() {
+            // BFS 遍历，记录每个节点所在的深度
+            let mut queue = std::collections::VecDeque::new();
+
+            // 从起始节点的邻居开始（双向），深度为 1
+            // 出边
+            for rel in self.db.neighbors_out(start_id) {
+                if rel.typ == rel_type {
+                    let neighbor = rel.end;
+                    if !visited.contains(&neighbor) {
+                        visited.insert(neighbor);
+                        queue.push_back((neighbor, 1));
+                    }
+                }
+            }
+            // 入边
+            for rel in self.db.neighbors_in(start_id) {
+                if rel.typ == rel_type {
+                    let neighbor = rel.start;
+                    if !visited.contains(&neighbor) {
+                        visited.insert(neighbor);
+                        queue.push_back((neighbor, 1));
+                    }
+                }
+            }
+
+            while let Some((node_id, depth)) = queue.pop_front() {
+                // 如果达到最小跳数，将节点加入结果
+                if depth >= min_hops {
+                    result.push(node_id);
+                }
+
+                // 如果达到最大跳数，停止扩展
+                if let Some(max) = max_hops {
+                    if depth >= max {
+                        continue;
+                    }
+                }
+
+                // 扩展出边
+                for rel in self.db.neighbors_out(node_id) {
+                    if rel.typ == rel_type {
+                        let neighbor = rel.end;
+                        if !visited.contains(&neighbor) {
+                            visited.insert(neighbor);
+                            queue.push_back((neighbor, depth + 1));
+                        }
+                    }
+                }
+
+                // 扩展入边
+                for rel in self.db.neighbors_in(node_id) {
+                    if rel.typ == rel_type {
+                        let neighbor = rel.start;
+                        if !visited.contains(&neighbor) {
+                            visited.insert(neighbor);
+                            queue.push_back((neighbor, depth + 1));
+                        }
+                    }
+                }
+            }
+        }
+
+        self.current = result;
+        self
+    }
+
     /// 对当前 ID 集合去重
     pub fn distinct(mut self) -> Self {
         use std::collections::HashSet;
@@ -147,9 +362,15 @@ impl<'a, E: StorageEngine> Query<'a, E> {
     }
 
     /// 跳过前 N 个节点
+    ///
+    /// # 优化说明
+    ///
+    /// 使用 `split_off` 而不是 `drain`，当 skip 值很大时更高效：
+    /// - `drain(0..n)`：需要移动剩余的所有元素
+    /// - `split_off(n)`：直接分割Vec，O(1)操作
     pub fn skip(mut self, n: usize) -> Self {
         if n < self.current.len() {
-            self.current.drain(0..n);
+            self.current = self.current.split_off(n);
         } else {
             self.current.clear();
         }
@@ -157,8 +378,62 @@ impl<'a, E: StorageEngine> Query<'a, E> {
     }
 
     /// 限制返回前 N 个节点
+    ///
+    /// # 优化说明
+    ///
+    /// 使用 `truncate`，这是 O(1) 操作，只修改长度不释放内存
+    ///
+    /// # 使用建议
+    ///
+    /// 尽可能先应用 `limit` 再应用 `skip`，以减少需要处理的数据量：
+    /// ```ignore
+    /// // 不推荐：先 skip 再 limit
+    /// q.skip(1000).limit(100)
+    ///
+    /// // 推荐：先 limit 再 skip（当确定数据量时）
+    /// q.limit(1100).skip(1000)
+    /// ```
     pub fn limit(mut self, n: usize) -> Self {
         self.current.truncate(n);
+        self
+    }
+
+    /// 组合应用 SKIP 和 LIMIT（分页查询优化版）
+    ///
+    /// # 参数
+    ///
+    /// * `offset` - 跳过的记录数
+    /// * `limit_count` - 返回的最大记录数
+    ///
+    /// # 性能优势
+    ///
+    /// 相比分别调用 `skip` 和 `limit`，这个方法一次性完成两个操作，
+    /// 避免中间步骤的内存分配和数据移动。
+    ///
+    /// # 示例
+    ///
+    /// ```ignore
+    /// // 第2页，每页100条
+    /// q.paginate(100, 100)
+    /// ```
+    pub fn paginate(mut self, offset: usize, limit_count: usize) -> Self {
+        let total = self.current.len();
+
+        if offset >= total {
+            self.current.clear();
+            return self;
+        }
+
+        let end = (offset + limit_count).min(total);
+
+        if offset == 0 {
+            self.current.truncate(end);
+        } else {
+            // 使用 split_off 避免移动
+            self.current = self.current.split_off(offset);
+            self.current.truncate(limit_count);
+        }
+
         self
     }
 
@@ -200,6 +475,14 @@ impl<'a, E: StorageEngine> Query<'a, E> {
             .collect()
     }
 
+    /// 收集当前节点为 Node 对象（借用版本）
+    pub fn collect_nodes_ref(&self) -> Vec<Node> {
+        self.current
+            .iter()
+            .filter_map(|id| self.db.get_node(*id))
+            .collect()
+    }
+
     /// 聚合：计数
     pub fn count(self) -> usize {
         self.current.len()
@@ -232,6 +515,136 @@ impl<'a, E: StorageEngine> Query<'a, E> {
         } else {
             Some(values.iter().sum::<i64>() as f64 / values.len() as f64)
         }
+    }
+
+    /// 聚合：计算百分位数（连续）
+    ///
+    /// # 参数
+    /// - `key`: 属性名
+    /// - `percentile`: 百分位数 (0.0 到 1.0)，例如 0.5 表示中位数
+    ///
+    /// # 返回
+    /// 百分位数值，如果没有数据则返回 None
+    ///
+    /// # 示例
+    /// ```ignore
+    /// let median = query.percentile_cont("age", 0.5); // 中位数
+    /// let p95 = query.percentile_cont("score", 0.95);  // 95th 百分位
+    /// ```
+    pub fn percentile_cont(self, key: &str, percentile: f64) -> Option<f64> {
+        if !(0.0..=1.0).contains(&percentile) {
+            return None;
+        }
+
+        let key = key.to_string();
+        let mut values: Vec<f64> = self
+            .current
+            .iter()
+            .filter_map(|&id| self.db.get_node(id))
+            .filter_map(|n| n.props.get(&key).cloned())
+            .filter_map(|v| match v {
+                Value::Int(i) => Some(i as f64),
+                Value::Float(f) => Some(f),
+                _ => None,
+            })
+            .collect();
+
+        if values.is_empty() {
+            return None;
+        }
+
+        values.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+
+        let n = values.len();
+        if n == 1 {
+            return Some(values[0]);
+        }
+
+        // 使用线性插值计算百分位数
+        let index = percentile * (n - 1) as f64;
+        let lower = index.floor() as usize;
+        let upper = index.ceil() as usize;
+        let fraction = index - lower as f64;
+
+        if lower == upper {
+            Some(values[lower])
+        } else {
+            Some(values[lower] + fraction * (values[upper] - values[lower]))
+        }
+    }
+
+    /// 聚合：计算标准差（样本标准差）
+    ///
+    /// # 参数
+    /// - `key`: 属性名
+    ///
+    /// # 返回
+    /// 标准差值，如果数据少于2个则返回 None
+    ///
+    /// # 公式
+    /// sqrt(sum((x - mean)^2) / (n - 1))
+    pub fn stdev(self, key: &str) -> Option<f64> {
+        let key = key.to_string();
+        let values: Vec<f64> = self
+            .current
+            .iter()
+            .filter_map(|&id| self.db.get_node(id))
+            .filter_map(|n| n.props.get(&key).cloned())
+            .filter_map(|v| match v {
+                Value::Int(i) => Some(i as f64),
+                Value::Float(f) => Some(f),
+                _ => None,
+            })
+            .collect();
+
+        if values.len() < 2 {
+            return None;
+        }
+
+        let n = values.len();
+        let mean: f64 = values.iter().sum::<f64>() / n as f64;
+        let variance = values.iter()
+            .map(|&x| (x - mean).powi(2))
+            .sum::<f64>() / (n - 1) as f64;
+
+        Some(variance.sqrt())
+    }
+
+    /// 聚合：计算方差（样本方差）
+    ///
+    /// # 参数
+    /// - `key`: 属性名
+    ///
+    /// # 返回
+    /// 方差值，如果数据少于2个则返回 None
+    ///
+    /// # 公式
+    /// sum((x - mean)^2) / (n - 1)
+    pub fn variance(self, key: &str) -> Option<f64> {
+        let key = key.to_string();
+        let values: Vec<f64> = self
+            .current
+            .iter()
+            .filter_map(|&id| self.db.get_node(id))
+            .filter_map(|n| n.props.get(&key).cloned())
+            .filter_map(|v| match v {
+                Value::Int(i) => Some(i as f64),
+                Value::Float(f) => Some(f),
+                _ => None,
+            })
+            .collect();
+
+        if values.len() < 2 {
+            return None;
+        }
+
+        let n = values.len();
+        let mean: f64 = values.iter().sum::<f64>() / n as f64;
+        let variance = values.iter()
+            .map(|&x| (x - mean).powi(2))
+            .sum::<f64>() / (n - 1) as f64;
+
+        Some(variance)
     }
 
     // ========== 缓存查询方法 ==========

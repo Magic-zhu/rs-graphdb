@@ -1,14 +1,35 @@
-use super::{NodeId, RelId, StoredNode, StoredRel, StorageEngine};
-use crate::values::Value;
+use super::{NodeId, RelId, StoredNode, StoredRel, StorageEngine, StorageError, TxHandle};
+use crate::values::{Value, Properties};
 use std::collections::HashMap;
+
+/// 事务操作记录（公开用于测试）
+#[derive(Debug, Clone)]
+pub enum TxOp {
+    CreateNode(NodeId, Vec<String>, Properties),
+    CreateRel(RelId, NodeId, NodeId, String, Properties),
+    DeleteNode(NodeId, StoredNode),
+    DeleteRel(RelId, StoredRel),
+    UpdateNode(NodeId, Properties),
+    UpdateRel(RelId, Properties),
+}
+
+/// 事务状态
+#[derive(Debug)]
+struct Transaction {
+    id: u64,
+    ops: Vec<TxOp>,
+    committed: bool,
+}
 
 pub struct MemStore {
     next_node_id: NodeId,
     next_rel_id: RelId,
+    next_tx_id: u64,
     nodes: HashMap<NodeId, StoredNode>,
     rels: HashMap<RelId, StoredRel>,
     outgoing: HashMap<NodeId, Vec<RelId>>,
     incoming: HashMap<NodeId, Vec<RelId>>,
+    transactions: HashMap<u64, Transaction>,
 }
 
 impl MemStore {
@@ -16,10 +37,12 @@ impl MemStore {
         Self {
             next_node_id: 0,
             next_rel_id: 0,
+            next_tx_id: 0,
             nodes: HashMap::new(),
             rels: HashMap::new(),
             outgoing: HashMap::new(),
             incoming: HashMap::new(),
+            transactions: HashMap::new(),
         }
     }
 }
@@ -181,5 +204,156 @@ impl StorageEngine for MemStore {
         }
 
         (start_id..start_id + count).collect()
+    }
+
+    // ========== 事务支持 ==========
+
+    fn begin_tx(&mut self) -> Result<TxHandle, StorageError> {
+        let tx_id = self.next_tx_id;
+        self.next_tx_id += 1;
+
+        self.transactions.insert(tx_id, Transaction {
+            id: tx_id,
+            ops: Vec::new(),
+            committed: false,
+        });
+
+        Ok(TxHandle(tx_id))
+    }
+
+    fn commit_tx(&mut self, tx_handle: TxHandle) -> Result<(), StorageError> {
+        let TxHandle(tx_id) = tx_handle;
+
+        let mut tx = self.transactions.remove(&tx_id)
+            .ok_or_else(|| StorageError::Other(format!("Transaction {} not found", tx_id)))?;
+
+        if tx.committed {
+            return Err(StorageError::Other(format!("Transaction {} already committed", tx_id)));
+        }
+
+        // 应用所有操作
+        for op in &tx.ops {
+            match op {
+                TxOp::CreateNode(id, labels, props) => {
+                    if !self.nodes.contains_key(id) {
+                        let node = StoredNode {
+                            id: *id,
+                            labels: labels.clone(),
+                            props: props.clone(),
+                        };
+                        self.nodes.insert(*id, node);
+                    }
+                }
+                TxOp::CreateRel(id, start, end, typ, props) => {
+                    if !self.rels.contains_key(id) {
+                        let rel = StoredRel {
+                            id: *id,
+                            start: *start,
+                            end: *end,
+                            typ: typ.clone(),
+                            props: props.clone(),
+                        };
+                        self.rels.insert(*id, rel);
+                        self.outgoing.entry(*start).or_default().push(*id);
+                        self.incoming.entry(*end).or_default().push(*id);
+                    }
+                }
+                TxOp::DeleteNode(id, _) => {
+                    self.delete_node(*id);
+                }
+                TxOp::DeleteRel(id, _) => {
+                    self.delete_rel(*id);
+                }
+                TxOp::UpdateNode(id, props) => {
+                    if let Some(node) = self.nodes.get_mut(id) {
+                        // 合并属性
+                        for (k, v) in props {
+                            node.props.insert(k.clone(), v.clone());
+                        }
+                    }
+                }
+                TxOp::UpdateRel(id, props) => {
+                    if let Some(rel) = self.rels.get_mut(id) {
+                        // 合并属性
+                        for (k, v) in props {
+                            rel.props.insert(k.clone(), v.clone());
+                        }
+                    }
+                }
+            }
+        }
+
+        tx.committed = true;
+        Ok(())
+    }
+
+    fn rollback_tx(&mut self, tx_handle: TxHandle) -> Result<(), StorageError> {
+        let TxHandle(tx_id) = tx_handle;
+
+        self.transactions.remove(&tx_id)
+            .ok_or_else(|| StorageError::Other(format!("Transaction {} not found", tx_id)))?;
+
+        // 简单地移除事务，不应用任何操作
+        Ok(())
+    }
+
+    fn update_node_props(&mut self, id: NodeId, props: HashMap<String, Value>) -> bool {
+        self.do_update_node_props(id, props)
+    }
+
+    fn update_rel_props(&mut self, id: RelId, props: HashMap<String, Value>) -> bool {
+        self.do_update_rel_props(id, props)
+    }
+}
+
+impl MemStore {
+    // ========== 存储层更新 API（私有辅助方法） ==========
+
+    /// 更新节点属性的内部实现
+    fn do_update_node_props(&mut self, id: NodeId, props: Properties) -> bool {
+        if let Some(node) = self.nodes.get_mut(&id) {
+            // 合并属性
+            for (k, v) in props {
+                node.props.insert(k, v);
+            }
+            true
+        } else {
+            false
+        }
+    }
+
+    /// 更新关系属性的内部实现
+    fn do_update_rel_props(&mut self, id: RelId, props: Properties) -> bool {
+        if let Some(rel) = self.rels.get_mut(&id) {
+            // 合并属性
+            for (k, v) in props {
+                rel.props.insert(k, v);
+            }
+            true
+        } else {
+            false
+        }
+    }
+
+    // ========== 事务操作辅助方法 ==========
+
+    /// 记录事务操作（用于测试）
+    pub fn record_tx_op(&mut self, tx_handle: TxHandle, op: TxOp) -> Result<(), StorageError> {
+        let TxHandle(tx_id) = tx_handle;
+
+        let tx = self.transactions.get_mut(&tx_id)
+            .ok_or_else(|| StorageError::Other(format!("Transaction {} not found", tx_id)))?;
+
+        tx.ops.push(op);
+        Ok(())
+    }
+
+    /// 获取事务操作数量（用于测试）
+    pub fn tx_op_count(&self, tx_handle: TxHandle) -> Result<usize, StorageError> {
+        let TxHandle(tx_id) = tx_handle;
+
+        self.transactions.get(&tx_id)
+            .map(|tx| tx.ops.len())
+            .ok_or_else(|| StorageError::Other(format!("Transaction {} not found", tx_id)))
     }
 }
