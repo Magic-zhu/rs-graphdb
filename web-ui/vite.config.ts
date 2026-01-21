@@ -16,7 +16,7 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks: {
-          "vis-network": ["vis-network"],
+          "antv-g6": ["@antv/g6"],
         },
       },
     },

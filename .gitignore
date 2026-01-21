@@ -4,3 +4,4 @@ node_modules/
 target
 static
 target
+Cargo.lock
